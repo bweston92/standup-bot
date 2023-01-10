@@ -18,49 +18,51 @@ const standupModel = require("./models/standup.model");
 
 const PREFIX = "!";
 
+const IS_DEBUG = process.env["DEBUG"] === "true";
+const debug = (msg) => {
+  if (IS_DEBUG) {
+    console.log('DEBUG: ', msg);
+  }
+};
+
 const standupIntroMessage = new MessageEmbed()
   .setColor("#ff9900")
   .setTitle("Daily Standup")
   .setURL("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
   .setDescription(
-    "This is the newly generated text channel used for daily standups! :tada:"
+    "Daily standups! :tada:"
   )
   .addFields(
     {
       name: "Introduction",
-      value: `Hi! I'm Stan D. Upbot and I will be facilitating your daily standups from now on.\nTo view all available commands, try \`${PREFIX}help\`.`,
+      value: `Hi! I will be facilitating your daily standups from now on.\nTo view all available commands, try \`${PREFIX}help\`.`,
     },
     {
       name: "How does this work?",
-      value: `Anytime before the standup time \`10:30 AM EST\`, members would private DM me with the command \`${PREFIX}show\`, I will present the standup prompt and they will type their response using the command \`${PREFIX}reply @<optional_serverId> [your-message-here]\`. I will then save their response in my *secret special chamber of data*, and during the designated standup time, I would present everyone's answer to \`#daily-standups\`.`,
+      value: `Anytime before the standup time \`10:30 AM\`, members would private DM me with the command \`${PREFIX}show\`,`+
+      `I will present the standup prompt and they will type their response using a command:\n`+
+      `- Overwrite all your reply with: \`${PREFIX}reply [your-message-here]\`\n`+
+      `- Append with a new task completed with: \`${PREFIX}task [your-message-here]\`\n`+
+      `- Append a new  \`${PREFIX}plan [your-message-here]\`\n`+
+      `- Append a follow up needed with: \`${PREFIX}obstacle [your-message-here]\`\n`+
+      `I will then save their response in my *secret special chamber of data*, and during the designated standup time, I would present everyone's answer to \`#daily-standups\`.`,
     },
     {
       name: "Getting started",
-      value: `*Currently*, there are no members in the standup! To add a member try \`${PREFIX}am <User>\`.`,
+      value: `*Currently*, there are no members in the standup! To add a member try \`${PREFIX}am <user>\`.`,
     }
-  )
-  .setFooter(
-    "https://github.com/navn-r/standup-bot",
-    "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
   )
   .setTimestamp();
 
 const dailyStandupSummary = new MessageEmbed()
   .setColor("#ff9900")
   .setTitle("Daily Standup")
-  .setURL("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-  .setFooter(
-    "https://github.com/navn-r/standup-bot",
-    "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
-  )
   .setTimestamp();
 
-// lists .js files in commands dir
 const commandFiles = fs
   .readdirSync("./commands")
   .filter((file) => file.endsWith(".js"));
 
-// init bot client with a collection of commands
 const bot = new Client();
 bot.commands = new Collection();
 
@@ -85,15 +87,28 @@ bot.once("ready", () => console.log("Discord Bot Ready"));
 
 // when a user enters a command
 bot.on("message", async (message) => {
-  if (!message.content.startsWith(PREFIX) || message.author.bot) return;
+  if (message.author.bot) {
+    debug("message was sent by bot");
+    return;
+  }
+
+  if (!message.content.startsWith(PREFIX)) {
+    debug(`message did not contain prefix '${PREFIX}' !== '${message.content[0]}'`);
+    return;
+  }
 
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
 
-  if (!bot.commands.has(commandName)) return;
+  if (!bot.commands.has(commandName)) {
+    debug("command is not recognised");
+    return;
+  }
 
-  if (message.mentions.users.has(bot.user.id))
+  if (message.mentions.users.has(bot.user.id)) {
+    debug("message mentioned the bot");
     return message.channel.send(":robot:");
+  }
 
   const command = bot.commands.get(commandName);
 
@@ -111,6 +126,7 @@ bot.on("message", async (message) => {
 
 bot.on("guildCreate", async (guild) => {
   // creates the text channel
+  debug("attempting to create 'daily-standups'");
   const channel = await guild.channels.create("daily-standups", {
     type: "text",
     topic: "Scrum Standup Meeting Channel",
@@ -129,6 +145,7 @@ bot.on("guildCreate", async (guild) => {
     .then(() => console.log("Howdy!"))
     .catch((err) => console.error(err));
 
+    debug("sending intro message");
   await channel.send(standupIntroMessage);
 });
 
@@ -140,11 +157,8 @@ bot.on("guildDelete", (guild) => {
     .catch((err) => console.error(err));
 });
 
-/**
- * Cron Job: 10:30:00 AM EST - Go through each standup and output the responses to the channel
- */
 let cron = schedule.scheduleJob(
-  { hour: 15, minute: 30, dayOfWeek: new schedule.Range(1, 5) },
+  { second: 10, dayOfWeek: new schedule.Range(1, 5) },
   (time) => {
     console.log(`[${time}] - CRON JOB START`);
     standupModel
@@ -153,6 +167,7 @@ let cron = schedule.scheduleJob(
         standups.forEach((standup) => {
           let memberResponses = [];
           let missingMembers = [];
+
           standup.members.forEach((id) => {
             if (standup.responses.has(id)) {
               memberResponses.push({
@@ -164,16 +179,25 @@ let cron = schedule.scheduleJob(
               missingMembers.push(id);
             }
           });
+
+
           let missingString = "Hooligans: ";
-          if (!missingMembers.length) missingString += ":man_shrugging:";
-          else missingMembers.forEach((id) => (missingString += `<@${id}> `));
-          bot.channels.cache
-            .get(standup.channelId)
-            .send(
-              new MessageEmbed(dailyStandupSummary)
-                .setDescription(missingString)
-                .addFields(memberResponses)
-            );
+          if (!missingMembers.length) {
+            missingString += ":man_shrugging:";
+          } else {
+            missingMembers.forEach((id) => (missingString += `<@${id}> `));
+          }
+
+          bot.channels.fetch(standup.channelId).then(channel => {
+            const msg = new MessageEmbed(dailyStandupSummary);
+            msg.setDescription(missingString);
+            msg.addFields(memberResponses);
+
+            debug("sent daily standup summary")
+            channel.send(msg);
+          }).catch(err => {
+            console.error(`unable to get channel: ${standup.channelId} - ${err}`)
+          })
           standup
             .save()
             .then(() =>
