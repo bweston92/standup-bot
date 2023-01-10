@@ -158,7 +158,7 @@ bot.on("guildDelete", (guild) => {
 });
 
 let cron = schedule.scheduleJob(
-  { second: 10, dayOfWeek: new schedule.Range(1, 5) },
+  { hour: 10, minute: 30, dayOfWeek: new schedule.Range(1, 5) },
   (time) => {
     console.log(`[${time}] - CRON JOB START`);
     standupModel
