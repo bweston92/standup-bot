@@ -157,6 +157,59 @@ bot.on("guildDelete", (guild) => {
     .catch((err) => console.error(err));
 });
 
+function createMissingContent(standup) {
+  let missingMembers = [];
+
+  standup.members.forEach(id => {
+    if (!standup.responses.has(id)) {
+      missingMembers.push(id);
+    }
+  });
+
+  if (!missingMembers.length) {
+    return "Nobody missed the standup: :man_shrugging:";
+  }
+  
+  let missingString = "Whoops, standup was missed by: ";
+  missingMembers.forEach(id => (missingString += `<@${id}> `));
+  return missingString;
+}
+
+function createFieldsFromStandup(standup) {
+  const responses = [];
+
+  standup.members.forEach(id => {
+    const segments = [];
+
+    let segment = "";
+    const replies = standup.responses.get(id).split("\n");
+
+    do {
+      let line = replies.shift();
+
+      if (line.length > 350) {
+        line = line.substr(0, 350) + '...';
+      }
+
+      if (segment.length + line.length > 800) {
+        segments.push(segment);
+        segment = "";
+      }
+
+      segment += line;
+    } while (replies.length > 0);
+
+    if (segment.length) {
+      segments.push(segment);
+    }
+
+    segments.forEach(text => responses.push({name: `-`, value: `<@${id}>\n${text}`}));
+    standup.responses.delete(id);
+  });
+
+  return responses;
+}
+
 let cron = schedule.scheduleJob(
   { hour: 10, minute: 30, dayOfWeek: new schedule.Range(1, 5) },
   (time) => {
@@ -165,45 +218,26 @@ let cron = schedule.scheduleJob(
       .find()
       .then((standups) => {
         standups.forEach((standup) => {
-          let memberResponses = [];
-          let missingMembers = [];
-
-          standup.members.forEach((id) => {
-            if (standup.responses.has(id)) {
-              memberResponses.push({
-                name: `-`,
-                value: `<@${id}>\n${standup.responses.get(id)}`,
-              });
-              standup.responses.delete(id);
-            } else {
-              missingMembers.push(id);
-            }
-          });
-
-
-          let missingString = "Hooligans: ";
-          if (!missingMembers.length) {
-            missingString += ":man_shrugging:";
-          } else {
-            missingMembers.forEach((id) => (missingString += `<@${id}> `));
-          }
-
           bot.channels.fetch(standup.channelId).then(channel => {
             const msg = new MessageEmbed(dailyStandupSummary);
-            msg.setDescription(missingString);
-            msg.addFields(memberResponses);
+            msg.setDescription(createMissingContent(standup));
+            msg.addFields(createFieldsFromStandup(standup));
 
-            debug("sent daily standup summary")
-            channel.send(msg);
+            channel.send(msg)
+            .then(() => {
+              debug("sent daily standup summary")
+              standup
+                .save()
+                .then(() =>
+                  console.log(`[${new Date()}] - ${standup._id} RESPONSES CLEARED`)
+                )
+                .catch((err) => console.error(err));
+            }).catch((err) => {
+              console.error("unable to send standup", err);
+            });
           }).catch(err => {
             console.error(`unable to get channel: ${standup.channelId} - ${err}`)
           })
-          standup
-            .save()
-            .then(() =>
-              console.log(`[${new Date()}] - ${standup._id} RESPONSES CLEARED`)
-            )
-            .catch((err) => console.error(err));
         });
       })
       .catch((err) => console.error(err));
