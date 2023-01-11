@@ -28,10 +28,7 @@ const debug = (msg) => {
 const standupIntroMessage = new MessageEmbed()
   .setColor("#ff9900")
   .setTitle("Daily Standup")
-  .setURL("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-  .setDescription(
-    "Daily standups! :tada:"
-  )
+  .setDescription("Daily standups! :tada:")
   .addFields(
     {
       name: "Introduction",
@@ -226,12 +223,10 @@ let cron = schedule.scheduleJob(
             channel.send(msg)
             .then(() => {
               debug("sent daily standup summary")
-              standup
-                .save()
-                .then(() =>
-                  console.log(`[${new Date()}] - ${standup._id} RESPONSES CLEARED`)
-                )
-                .catch((err) => console.error(err));
+              standup.save().then(() =>
+                console.log(`[${new Date()}] - ${standup._id} RESPONSES CLEARED`)
+              )
+              .catch((err) => console.error(err));
             }).catch((err) => {
               console.error("unable to send standup", err);
             });
